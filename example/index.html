@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kopi Santai — SmartBoard example</title>
+
+<!--
+  No build step. The SmartBoard browser runtime is plain ES modules served from
+  /runtime, and the one third-party dependency (ECharts) is pinned in the import
+  map below. Everything you see running is a file you can open and read.
+-->
+<script type="importmap">
+{ "imports": { "echarts": "https://esm.sh/echarts@5.5.0" } }
+</script>
+
+<style>
+  :root {
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --bg-0: #14171c; --bg-1: #1a1e25; --bg-2: #222831; --bg-3: #2b323d;
+    --line: #313945; --line-soft: #272e38; --line-strong: #414b5a;
+    --fg: #eef2f6; --fg-2: #b9c3cf; --fg-3: #7f8b99; --fg-4: #5a6572;
+    --accent: #4aa8d8; --accent-soft: rgba(74,168,216,0.16); --accent-fg: #0b1116;
+    --ok: #5fc9a0; --warn: #e8b84a; --high: #e08a4a; --crit: #e05a7a;
+    --chart-1: #4aa8d8; --chart-2: #5fc9a0; --chart-3: #e8b84a;
+    --chart-4: #e08a4a; --chart-5: #9d8ae0; --chart-6: #e05a7a;
+    --r-2: 6px; --r-3: 8px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg-0); color: var(--fg);
+    font-family: var(--font-sans); font-size: 13px; line-height: 1.5;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--bg-1);
+  }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  header .sub { font-size: 11px; color: var(--fg-3); }
+  header .brain {
+    margin-left: auto; font-family: var(--font-mono); font-size: 10px;
+    padding: 2px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--fg-3);
+  }
+
+  main { display: grid; grid-template-columns: 1fr 340px; gap: 0; height: calc(100vh - 53px); }
+  #board { overflow-y: auto; padding: 16px; display: grid; grid-template-columns: repeat(12, 1fr); gap: 12px; align-content: start; }
+
+  .panel {
+    background: var(--bg-1); border: 1px solid var(--line); border-radius: var(--r-3);
+    display: flex; flex-direction: column; overflow: hidden; min-height: 0;
+  }
+  .panel-head {
+    padding: 9px 12px; border-bottom: 1px solid var(--line-soft);
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+  }
+  .panel-eyebrow {
+    font-family: var(--font-mono); font-size: 8.5px; text-transform: uppercase;
+    letter-spacing: 0.09em; color: var(--fg-4);
+  }
+  .panel-title { font-size: 12px; font-weight: 600; }
+  .panel-close {
+    background: none; border: none; color: var(--fg-4); cursor: pointer;
+    font-size: 15px; line-height: 1; padding: 0 2px;
+  }
+  .panel-close:hover { color: var(--crit); }
+  .panel-body { flex: 1; min-height: 190px; padding: 8px; }
+  .panel-note { padding: 7px 12px; border-top: 1px solid var(--line-soft); font-size: 10.5px; color: var(--fg-3); }
+  .panel-empty { display: grid; place-items: center; height: 100%; color: var(--fg-4); font-size: 11px; text-align: center; padding: 0 20px; }
+
+  /* The kinds the ECharts adapter renders as HTML rather than canvas. */
+  .kpi-row { display: flex; gap: 18px; flex-wrap: wrap; height: 100%; align-items: center; padding: 0 8px; }
+  .kpi, .stat { cursor: pointer; }
+  .kpi-label, .stat-label { font-size: 10px; color: var(--fg-3); }
+  .kpi-value, .stat-value { font-family: var(--font-mono); font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
+  .kpi-unit, .stat-unit { font-size: 9.5px; color: var(--fg-4); }
+  .stat { display: grid; place-content: center; height: 100%; text-align: center; gap: 2px; }
+  .stat-delta { font-family: var(--font-mono); font-size: 11px; }
+  .stat-delta-vs { color: var(--fg-4); }
+  .table-wrap { height: 100%; overflow: auto; }
+  .data-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .data-table th {
+    text-align: left; position: sticky; top: 0; background: var(--bg-2);
+    font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--fg-3);
+    font-weight: 500; padding: 5px 8px; border-bottom: 1px solid var(--line);
+  }
+  .data-table td { padding: 4px 8px; border-bottom: 1px solid var(--line-soft); }
+  .data-table td.metric { font-family: var(--font-mono); text-align: right; }
+  .data-table tr.is-lit { background: var(--accent-soft); }
+  .table-more { padding: 6px 8px; font-size: 10px; color: var(--fg-4); }
+
+  aside { border-left: 1px solid var(--line); background: var(--bg-1); display: flex; flex-direction: column; min-height: 0; }
+  #log { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .msg { padding: 8px 11px; border-radius: var(--r-2); font-size: 12px; max-width: 92%; }
+  .msg--system { background: var(--bg-2); color: var(--fg-3); font-size: 11px; line-height: 1.6; max-width: 100%; }
+  .msg--user { background: var(--accent-soft); color: var(--fg); align-self: flex-end; border: 1px solid rgba(74,168,216,0.3); }
+  .msg--brain { background: var(--bg-2); border: 1px solid var(--line); }
+  .msg--error { background: rgba(224,90,122,0.12); border: 1px solid var(--crit); color: var(--fg); }
+  .trace, .cmd {
+    font-family: var(--font-mono); font-size: 9.5px; color: var(--fg-4);
+    padding: 2px 8px; border: 1px solid var(--line-soft); border-radius: 999px; align-self: flex-start;
+  }
+  .cmd { color: var(--accent); border-color: rgba(74,168,216,0.35); }
+  .suggestions { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 14px 10px; }
+  .suggestions button {
+    font-size: 10.5px; padding: 4px 9px; border-radius: 999px; cursor: pointer;
+    background: var(--bg-2); color: var(--fg-2); border: 1px solid var(--line); font-family: inherit;
+  }
+  .suggestions button:hover { border-color: var(--accent); color: var(--accent); }
+  .composer { display: flex; gap: 7px; padding: 11px; border-top: 1px solid var(--line); }
+  .composer input {
+    flex: 1; background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--r-2);
+    padding: 7px 10px; color: var(--fg); font-family: inherit; font-size: 12px;
+  }
+  .composer input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .composer button {
+    background: var(--accent); color: var(--accent-fg); border: none; border-radius: var(--r-2);
+    padding: 7px 15px; font-weight: 600; font-size: 12px; cursor: pointer; font-family: inherit;
+  }
+  .composer button:disabled { opacity: 0.5; cursor: default; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Kopi Santai</h1>
+  <span class="sub">a SmartBoard example · twelve cities, 180 days</span>
+  <span class="brain" id="brain">connecting…</span>
+</header>
+
+<main>
+  <div id="board"></div>
+  <aside>
+    <div id="log">
+      <div class="msg msg--system" id="hint">Loading the catalog…</div>
+    </div>
+    <div class="suggestions" id="suggestions"></div>
+    <div class="composer">
+      <input id="input" placeholder="Ask about revenue, cities or products…" autocomplete="off" />
+      <button id="send">Ask</button>
+    </div>
+  </aside>
+</main>
+
+<script type="module">
+import { createStore } from '/runtime/store.js';
+import { SmartBoardClient, VizRegistry, applyFilters, t } from '/runtime/client.js';
+import { registerAll } from '/runtime/adapters/echarts.js';
+
+const store = createStore();
+const client = new SmartBoardClient({ baseUrl: '/api/board', store });
+const registry = registerAll(new VizRegistry());
+
+const boardEl = document.getElementById('board');
+const logEl = document.getElementById('log');
+
+// The panels this board opens with. They go through POST /query — the same
+// validate → guard → compile → scope → execute path a model-issued query takes,
+// with no model involved. One reducer, two callers.
+const DEFAULT_PANELS = [
+  {
+    panel_id: 'p_revenue_total',
+    ir: { metrics: ['revenue_myr', 'cups_sold', 'avg_ticket_myr'], label: 'Headline' },
+    viz: 'kpi',
+    encoding: { y: ['revenue_myr', 'cups_sold', 'avg_ticket_myr'] },
+    title: { en: 'Six months of trading' },
+    layout: { col_span: 12 },
+  },
+  {
+    panel_id: 'p_revenue_month',
+    ir: { metrics: ['revenue_myr'], dimensions: ['month'], label: 'Revenue by month' },
+    viz: 'line',
+    encoding: { x: 'month', y: ['revenue_myr'] },
+    title: { en: 'Revenue by month' },
+    note: { en: 'Takings are trending up about 18% across the window.' },
+    style: { smooth: true },
+    layout: { col_span: 7 },
+  },
+  {
+    panel_id: 'p_city_revenue',
+    ir: { metrics: ['revenue_myr'], dimensions: ['city'], limit: 20, label: 'Revenue by city' },
+    viz: 'bar',
+    encoding: { x: 'city', y: ['revenue_myr'] },
+    title: { en: 'Revenue by city' },
+    style: { horizontal: true, sort: 'desc', grid: false },
+    layout: { col_span: 5 },
+  },
+];
+
+// --- rendering ------------------------------------------------------------
+// React is not required. The store emits, this redraws. That is the whole
+// binding — proof the runtime is not secretly coupled to a view layer.
+
+const mounted = new Map();   // panelId -> cleanup fn
+
+function renderBoard() {
+  const state = store.getState();
+  const panels = state.order.map((id) => state.panels.find((p) => p.panelId === id)).filter(Boolean);
+  const live = new Set(panels.map((p) => p.panelId));
+
+  for (const [id, cleanup] of mounted) {
+    if (!live.has(id)) { cleanup?.(); mounted.delete(id); }
+  }
+  for (const el of [...boardEl.children]) {
+    if (!live.has(el.dataset.panel)) el.remove();
+  }
+
+  for (const panel of panels) {
+    let card = boardEl.querySelector(`[data-panel="${panel.panelId}"]`);
+    const signature = JSON.stringify([panel.viz, panel.resultId, panel.encoding, panel.style, state.globalFilters]);
+
+    if (card && card.dataset.signature === signature) {
+      boardEl.appendChild(card);   // keep DOM order in sync with store order
+      continue;
+    }
+
+    if (card) { mounted.get(panel.panelId)?.(); mounted.delete(panel.panelId); card.remove(); }
+
+    card = document.createElement('article');
+    card.className = 'panel';
+    card.dataset.panel = panel.panelId;
+    card.dataset.signature = signature;
+    card.style.gridColumn = `span ${panel.layout?.colSpan || 6}`;
+    card.innerHTML = `
+      <div class="panel-head">
+        <div>
+          <div class="panel-eyebrow">${panel.viz.replace(/_/g, ' ')} · ${panel.panelId}</div>
+          <div class="panel-title"></div>
+        </div>
+        <button class="panel-close" title="Remove this panel">×</button>
+      </div>
+      <div class="panel-body"></div>`;
+    card.querySelector('.panel-title').textContent = t(panel.title, 'en') || panel.panelId;
+    card.querySelector('.panel-close').onclick = () =>
+      store.apply({ action: 'remove_panel', panel_id: panel.panelId });
+
+    if (panel.note) {
+      const note = document.createElement('div');
+      note.className = 'panel-note';
+      note.textContent = t(panel.note, 'en');
+      card.appendChild(note);
+    }
+    boardEl.appendChild(card);
+
+    drawInto(card.querySelector('.panel-body'), panel);
+  }
+}
+
+async function drawInto(body, panel) {
+  // The registry lookup is the whole view-side security story: the model names
+  // a kind, and if it is not registered here, nothing renders. It cannot supply
+  // markup or a component.
+  const render = registry.get(panel.viz);
+  if (!render) {
+    body.innerHTML = `<div class="panel-empty">No renderer is registered for '${panel.viz}'.</div>`;
+    return;
+  }
+  try {
+    // Rows are fetched by the browser, directly — never routed through the model.
+    const result = await client.result(panel.resultId);
+    const rows = applyFilters(result.rows, result.columns, store.getState().globalFilters);
+    body.innerHTML = '';
+    const cleanup = render(body, {
+      rows, columns: result.columns, encoding: panel.encoding || {},
+      panel, store, manifest: client.manifest, locale: 'en',
+    });
+    mounted.set(panel.panelId, cleanup);
+  } catch (err) {
+    body.innerHTML = `<div class="panel-empty">${err.message}</div>`;
+  }
+}
+
+store.subscribe(renderBoard);
+
+// --- chat -----------------------------------------------------------------
+
+function say(cls, text) {
+  const div = document.createElement('div');
+  div.className = cls;
+  div.textContent = text;
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+  return div;
+}
+
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+let busy = false;
+
+async function ask(message) {
+  if (!message.trim() || busy) return;
+  busy = true;
+  sendBtn.disabled = true;
+  input.value = '';
+  document.getElementById('suggestions').innerHTML = '';
+  say('msg msg--user', message);
+  const status = say('msg msg--system', 'thinking…');
+
+  try {
+    await client.send(message, {
+      locale: 'en',
+      onEvent(event) {
+        if (event.type === 'status') status.textContent = event.detail ? `${event.stage} · ${event.detail}` : `${event.stage}…`;
+        if (event.type === 'text') say('msg msg--brain', event.text);
+        if (event.type === 'result') say('trace', `${event.label || 'query'} · ${event.row_count} rows · ${event.elapsed_ms}ms`);
+        if (event.type === 'command') say('cmd', event.command.action + (event.command.panel_id ? ` · ${event.command.panel_id}` : ''));
+        if (event.type === 'error') say('msg msg--error', event.message);
+      },
+    });
+  } catch (err) {
+    say('msg msg--error', err.message);
+  } finally {
+    status.remove();
+    busy = false;
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+sendBtn.onclick = () => ask(input.value);
+input.onkeydown = (e) => { if (e.key === 'Enter') ask(input.value); };
+
+// --- boot -----------------------------------------------------------------
+
+(async () => {
+  try {
+    const { manifest, health } = await client.init();
+    document.getElementById('brain').textContent = health.live_model ? health.brain.split('@')[0] : 'heuristic brain';
+    document.getElementById('hint').textContent =
+      `${Object.keys(manifest.metrics).length} metrics and ${Object.keys(manifest.dimensions).length} dimensions are in the catalog. ` +
+      `The assistant can only name those, and can only draw the kinds registered in this page.` +
+      (health.live_model ? '' : ' No model key is set, so a keyword-matching fallback brain is driving the board.');
+
+    const sugg = document.getElementById('suggestions');
+    for (const s of (manifest.suggestions || []).slice(0, 6)) {
+      const b = document.createElement('button');
+      b.textContent = s;
+      b.onclick = () => ask(s);
+      sugg.appendChild(b);
+    }
+
+    const results = await Promise.all(
+      DEFAULT_PANELS.map((p) => client.query(p.ir).then((r) => ({ p, r }), (e) => ({ p, e }))),
+    );
+    for (const { p, r, e } of results) {
+      if (e) { console.warn(`default panel ${p.panel_id} skipped:`, e.message); continue; }
+      store.apply({
+        action: 'add_panel', panel_id: p.panel_id, result_id: r.result_id, viz: p.viz,
+        encoding: p.encoding, title: p.title, note: p.note, style: p.style,
+        layout: p.layout, slot: 'append',
+      });
+    }
+  } catch (err) {
+    document.getElementById('hint').textContent = `Could not load the catalog: ${err.message}`;
+  }
+})();
+</script>
+</body>
+</html>

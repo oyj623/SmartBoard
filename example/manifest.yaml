@@ -1,0 +1,168 @@
+# ---------------------------------------------------------------------------
+# SmartBoard manifest — Kopi Santai, a fictional Malaysian cafe chain.
+#
+# This file is the ENTIRE project-specific surface of the board. The engine,
+# the SQL compiler, the tool schemas, the command validator and the browser
+# runtime are all generic; this is what makes them speak coffee.
+#
+# The safety rule the whole design rests on:
+#   Every SQL fragment below (`from`, `joins`, `expr`, `columns`) is authored by
+#   you and shipped with your source, so it is trusted for exactly the same
+#   reason your route handlers are trusted. Everything arriving from the model
+#   is either an IDENTIFIER that must resolve against this catalog, or a VALUE
+#   that becomes a bound parameter. There is no third category, which is why the
+#   model cannot inject SQL even in principle.
+# ---------------------------------------------------------------------------
+
+name: kopisantai
+title:
+  en: Kopi Santai — Store Intelligence
+
+locales: [en]
+currency: RM
+
+source:
+  adapter: sqlite
+  path: ./cafe.db          # resolved relative to this manifest
+  mode: readonly
+
+limits:
+  max_rows: 5000
+  statement_timeout_ms: 5000
+
+default_time_dim: month
+
+datasets:
+  sales:
+    description: One row per store, per day, per product. The whole business.
+    from: sales s
+    joins:
+      - JOIN cities c ON c.id = s.city_id
+
+metrics:
+  revenue_myr:
+    dataset: sales
+    expr: SUM(s.revenue_myr)
+    label: { en: Revenue }
+    unit: MYR
+    format: currency
+    direction: up_good
+    description: Total takings across every store in scope.
+
+  cups_sold:
+    dataset: sales
+    expr: SUM(s.qty)
+    label: { en: Units sold }
+    unit: units
+    format: number
+    direction: up_good
+
+  order_count:
+    dataset: sales
+    expr: COUNT(*)
+    label: { en: Order lines }
+    unit: lines
+    format: number
+    direction: up_good
+
+  avg_ticket_myr:
+    dataset: sales
+    expr: SUM(s.revenue_myr) / NULLIF(COUNT(*), 0)
+    label: { en: Average line value }
+    unit: MYR
+    format: currency
+    direction: up_good
+    description: Revenue divided by order lines. Around RM 9 is normal; below 7 means discounting.
+
+  unit_price_myr:
+    dataset: sales
+    expr: SUM(s.revenue_myr) / NULLIF(SUM(s.qty), 0)
+    label: { en: Average unit price }
+    unit: MYR
+    format: currency
+    direction: up_good
+
+  store_count:
+    dataset: sales
+    expr: COUNT(DISTINCT s.city_id)
+    label: { en: Cities trading }
+    unit: cities
+    format: number
+    direction: neutral
+
+dimensions:
+  day:
+    type: time
+    native_grain: day
+    label: { en: Day }
+    description: Calendar day, YYYY-MM-DD.
+    columns:
+      sales: s.date
+
+  month:
+    type: time
+    native_grain: month
+    label: { en: Month }
+    description: Calendar month, YYYY-MM. The default time axis.
+    columns:
+      sales: substr(s.date, 1, 7)
+
+  city:
+    type: string
+    label: { en: City }
+    description: The town the store trades in. Twelve across Malaysia.
+    columns:
+      sales: c.name
+
+  city_location:
+    type: geo
+    label: { en: City location }
+    description: >
+      Same cities as `city`, but expanded into map coordinates. Name this one
+      whenever the answer belongs on a map — the compiler adds latitude and
+      longitude columns automatically.
+    geo: { lat: c.lat, lng: c.lng }
+    columns:
+      sales: c.name
+
+  product:
+    type: string
+    label: { en: Product }
+    values: [espresso, latte, kopi_o, teh_tarik, matcha, croissant, nasi_lemak, kaya_toast]
+    columns:
+      sales: s.product
+
+  category:
+    type: string
+    label: { en: Category }
+    values: [drink, food]
+    columns:
+      sales: s.category
+
+viz:
+  enabled: [stat, kpi, line, area, bar, stacked_bar, scatter, donut, gauge, table, map_points]
+
+commands:
+  enabled:
+    - add_panel
+    - update_panel
+    - remove_panel
+    - set_filter
+    - clear_filters
+    - highlight
+    - focus_map
+    - set_layout
+    - narrate
+    - ask_clarification
+
+glossary:
+  Kopi O: Black coffee, no milk — the house staple.
+  Line: One product on one receipt. Several lines make an order.
+
+suggestions:
+  - Plot revenue by month
+  - Which cities sell the most?
+  - Map revenue across the country
+  - Compare products by units sold
+  - Show me average line value by city
+  - Break revenue down by category
