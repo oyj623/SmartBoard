@@ -191,6 +191,17 @@ export function mapPoints(el, ctx, config = {}) {
     .map((r) => ({ row: r, lat: r[geoCol.lat_field], lng: r[geoCol.lng_field] }))
     .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
 
+  // Marker size has to fall as the point count rises. A radius that reads well
+  // for two hundred features draws two thousand as one continuous smear, and a
+  // map you cannot see through is worse than no map. Scale the radius, the
+  // stroke and the fill together so dense maps stay readable and sparse ones
+  // are unchanged.
+  const density =
+    points.length > 1500 ? 0.36 : points.length > 600 ? 0.55 : points.length > 250 ? 0.75 : 1;
+  const radiusFor = (at) => (2.5 + 9 * (Number.isFinite(at) ? at : 0.3)) * density + 1.2;
+  const strokeWidth = Math.max(0.4, 1.5 * density);
+  const baseOpacity = style.opacity ?? (density < 0.6 ? 0.55 : 0.7);
+
   const { map, destroy } = mountMap(el, config);
   const markers = new Map();
 
@@ -198,11 +209,11 @@ export function mapPoints(el, ctx, config = {}) {
     const key = String(row[geoCol.id]);
     const at = norm(row[metric]);
     const marker = L.circleMarker([lat, lng], {
-      radius: 5 + 9 * (Number.isFinite(at) ? at : 0.3),
+      radius: radiusFor(at),
       color: colourAt(at),
       fillColor: colourAt(at),
-      fillOpacity: style.opacity ?? 0.7,
-      weight: 1.5,
+      fillOpacity: baseOpacity,
+      weight: strokeWidth,
     }).addTo(map);
 
     marker.bindTooltip(
@@ -262,8 +273,10 @@ export function mapPoints(el, ctx, config = {}) {
       marker.setStyle({
         color: on ? (emph ? css('--high', '#e08a4a') : base) : fade(base, 0.35),
         fillColor: on ? base : fade(base, 0.2),
-        fillOpacity: on ? (style.opacity ?? 0.75) : 0.1,
-        weight: on && emph ? 2.5 : 1.5,
+        fillOpacity: on ? baseOpacity : 0.08,
+        // An emphasised mark keeps a legible stroke however dense the map is —
+        // that is the whole point of emphasising it.
+        weight: on && emph ? Math.max(2, strokeWidth * 2) : strokeWidth,
       });
       if (on && emph) marker.bringToFront();
     }

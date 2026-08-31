@@ -413,6 +413,16 @@ check("no SQL reaches the event stream", not any("sql" in e for e in events), [e
 done = events[-1]
 check("history comes back trimmed of tool traffic", all(m["role"] in ("user", "assistant") for m in done["messages"]))
 
+# A turn where every round is refused must still say something. The guarded
+# engine refuses `revenue_myr` for a viewer, and the heuristic brain will keep
+# asking for it, so this exercises the real dead end rather than a simulated one.
+events = list(run_turn(GUARDED, HeuristicBrain(MANIFEST), "show me revenue", TurnContext(), VIEWER))
+kinds = [e["type"] for e in events]
+texts = [e["text"] for e in events if e["type"] == "text"]
+check("a fully refused turn still speaks", "text" in kinds, kinds)
+check("and it says why", texts and "owner access" in texts[-1], texts)
+check("a refused turn draws nothing", "command" not in kinds, kinds)
+
 # ---------------------------------------------------------------------------
 print("\nfastapi binding")
 # ---------------------------------------------------------------------------

@@ -71,6 +71,15 @@ def run_turn(
     result_ids: set = set()
     usage: Dict[str, int] = {}
 
+    # Did anything the person can actually see come out of this turn? A turn
+    # that refuses every round — an entitlement the caller does not have, a
+    # metric that is not in the catalog — would otherwise end in silence, and
+    # silence in a chat column reads as a broken app rather than as an answer.
+    # See the closing block below.
+    spoke = False
+    changed = False
+    last_refusal: Optional[str] = None
+
     for round_no in range(MAX_TOOL_ROUNDS):
         yield {"type": "status", "stage": "thinking", "round": round_no + 1}
 
@@ -86,6 +95,7 @@ def run_turn(
                 usage[k] = usage.get(k, 0) + v
 
         if reply.text:
+            spoke = True
             yield {"type": "text", "text": reply.text}
 
         if not reply.tool_calls:
@@ -135,6 +145,7 @@ def run_turn(
                 except (ManifestError, ValueError) as exc:
                     # Hand the error back to the brain rather than to the user.
                     # It nearly always self-corrects on the next round.
+                    last_refusal = str(exc)
                     payload = {"error": str(exc), "hint": "Use only catalog ids listed in the system prompt."}
                     yield {"type": "status", "stage": "retrying", "detail": str(exc)}
 
@@ -144,6 +155,7 @@ def run_turn(
                     raw, ctx, known_result_ids=result_ids, allowed_actions=allowed_actions
                 )
                 for cmd in outcome.accepted:
+                    changed = True
                     yield {"type": "command", "command": cmd}
                 payload = {
                     "applied": len(outcome.accepted),
@@ -151,6 +163,7 @@ def run_turn(
                     "message": outcome.feedback(),
                 }
                 if outcome.rejected:
+                    last_refusal = outcome.rejected[0]["error"]
                     yield {"type": "status", "stage": "retrying", "detail": outcome.rejected[0]["error"]}
 
             elif tc.name in handlers:
@@ -183,6 +196,26 @@ def run_turn(
         # Nothing left to correct and the board has been touched: stop early.
         if all(tc.name == "apply_commands" for tc in reply.tool_calls) and reply.text:
             break
+
+    # A turn that said nothing and drew nothing has to account for itself. This
+    # happens when every round was refused — an entitlement the caller does not
+    # have, or a metric that is simply not in the catalog — and the brain kept
+    # trying the same thing. Ending in silence leaves the person looking at
+    # their own message wondering whether the app is broken, which is the worst
+    # of the available outcomes: the refusal was correct and we hid it.
+    if not spoke and not changed:
+        if last_refusal:
+            message = (
+                f"I could not answer that: {last_refusal}. "
+                "Try asking for something in the catalog, or ask someone with wider access."
+            )
+        else:
+            message = (
+                "I could not turn that into a question I am able to ask. "
+                "Try naming a specific metric or a breakdown you want to see."
+            )
+        log.info("smartboard.empty_turn refusal=%s", last_refusal)
+        yield {"type": "text", "text": message}
 
     yield {"type": "done", "usage": usage, "messages": _trim(messages)}
 
