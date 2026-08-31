@@ -1,0 +1,9 @@
+# Engine core
+pydantic>=2.5
+PyYAML>=6.0
+httpx>=0.27          # OpenAICompatBrain; not needed if you only use HeuristicBrain
+
+# FastAPI binding + example app
+fastapi>=0.111
+uvicorn[standard]>=0.30
+python-dotenv>=1.0

@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Example database (built by example/seed.py)
+example/cafe.db
+
+# Environment & secrets
+.env
+
+# Node (if you vendor smartboard-js into a bundled app for testing)
+node_modules/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Test & cache
+.pytest_cache/
+.cache/
+
+# Internal planning docs
+docs/superpowers/
+.superpowers/
+.claude/settings.local.json
