@@ -1,7 +1,13 @@
 # The manifest
 
-The one file that makes SmartBoard project-specific. Everything the model is
-allowed to do is declared here.
+Everything the model is allowed to do is declared here: the datasets, metrics and
+dimensions it may name, plus the deployment's own configuration.
+
+> **Since 0.2 these are two halves that can live apart.** Configuration stays in
+> `board.yaml`; the catalog may come from a file, from warehouse introspection, or
+> from a metadata service. A single file holding both still works exactly as
+> before. See [`CATALOG.md`](CATALOG.md) for where entries live and how their SQL
+> is pinned; this document remains the reference for what an entry *contains*.
 
 **The rule that keeps the design honest:** SQL fragments (`expr`, `column`,
 `columns`, `from`, `joins`) come only from this file, which you author and ship

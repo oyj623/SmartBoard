@@ -45,7 +45,8 @@ the whole pipeline work, not enough to reason well. Set `DEEPSEEK_API_KEY` or
 `OPENAI_API_KEY` for the real thing.
 
 ```bash
-python tests/test_smartboard.py     # 79 checks, no network, no model
+python tests/test_smartboard.py     # 82 checks, no network, no model
+python tests/test_catalog.py        # 55 checks over the catalog split
 ```
 
 ---
@@ -127,7 +128,11 @@ That is the whole integration. Everything else is your manifest.
 
 ```
 smartboard/                Python engine
-  manifest.py              the catalog loader — the one project-specific file
+  config.py                deployment configuration — yours, in your repo
+  manifest.py              the two halves, assembled
+  catalog/                 where metrics come from: file, introspect, service
+    lock.py                structural digests — labels float, SQL is pinned
+  cli.py                   catalog pull / verify / show / draft
   ir.py                    the only shape in which the model may ask for data
   compiler.py              IR → parameterized SQL
   engine.py                validate → guard → compile → scope → execute
@@ -151,7 +156,8 @@ smartboard-js/             browser runtime
 
 example/                   a complete deployment in four files, no build step
 docs/                      ARCHITECTURE · MANIFEST · SECURITY · EXTENDING
-tests/test_smartboard.py   79 checks
+tests/test_smartboard.py   82 checks
+tests/test_catalog.py      55 checks over the split, the merge and the lock
 ```
 
 ---
@@ -162,6 +168,7 @@ tests/test_smartboard.py   79 checks
 |---|---|
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How a turn works, the five parts, why one reducer serves two callers |
 | [MANIFEST.md](docs/MANIFEST.md) | Every manifest key, with the reasoning behind the awkward ones |
+| [CATALOG.md](docs/CATALOG.md) | Where metrics come from — file, introspection or a metadata service — and why SQL is locked |
 | [SECURITY.md](docs/SECURITY.md) | The threat table, both entitlement layers, and what it does *not* defend against |
 | [EXTENDING.md](docs/EXTENDING.md) | New metrics, chart kinds, commands, databases, providers, and whole modules |
 
@@ -171,7 +178,7 @@ tests/test_smartboard.py   79 checks
 
 - [SmartBoard_Telco_Demo](https://github.com/oyj623/SmartBoard_Telco_Demo) —
   Nusatel, a Malaysian network operator: 2,500 sites on real coordinates,
-  1.35M daily KPI rows, state-level tenancy and a choropleth of all 16 states.
+  1.09M daily KPI rows, state-level tenancy and a choropleth of all 16 states.
 
 ---
 
